@@ -4,6 +4,7 @@ import os
 import argparse
 import time
 import textwrap
+import subprocess
 from dataclasses import dataclass
 from collections import defaultdict
 from subprocess import Popen, PIPE
@@ -18,12 +19,12 @@ def parse_args():
 
             %(prog)s comes with ABSOLUTELY NO WARRANTY. This is free software,
             and you are welcome to redistribute it under certain conditions.
-            See the GNU General Public Licence version 3 (or later) for details.       
+            See the GNU General Public Licence version 3 (or later) for details.
         """),
     )
     parser.add_argument(
-        "--version", 
-        action="version", 
+        "--version",
+        action="version",
         version="%(prog)s 1.1.0",
     )
     parser.add_argument(
@@ -35,8 +36,8 @@ def parse_args():
         help="standby timeout in seconds (default: %(default)s)",
     )
     parser.add_argument(
-        "disk", 
-        nargs="+", 
+        "disk",
+        nargs="+",
         help="Disks to monitor",
     )
     return parser.parse_args()
@@ -54,6 +55,11 @@ def group_drives(drive_list):
 
 def to_hms(s):
     return "%d:%02d:%02d" % (s / 3600, s / 60 % 60, s % 60)
+
+
+def open_files(mount):
+    command = subprocess.run(['lsof', '+f', '--', mount], stdout=subprocess.PIPE)
+    return command.stdout.decode()
 
 
 def get_diskstats():
@@ -97,7 +103,9 @@ class Array:
     old_stats: dict = None
 
     def wake_up(self):
-        print(f"Waking up array {self.name!r} after {to_hms(time.time() - self.last_access)} of inactivity")
+        print(f"Array {self.name!r}: Waking up after {to_hms(time.time() - self.last_access)} of inactivity")
+        print(f"Array {self.name!r}: Open files:")
+        print(open_files(self.name))
         for p in [
             Popen(["hdparm", "--read-sector", "0", d], stdout=PIPE)
             for d in self.devices
@@ -105,7 +113,7 @@ class Array:
             p.wait()
 
     def power_down(self):
-        print(f"Powering down array {self.name!r} after {to_hms(time.time() - self.last_standby)}")
+        print(f"Array {self.name!r}: Powering down after {to_hms(time.time() - self.last_standby)}")
         # hdparm may take a long time, so execute in parallel
         for p in [
             Popen(["hdparm", "-y", d], stdout=PIPE)
@@ -139,7 +147,7 @@ if __name__ == "__main__":
         array_list.append(Array(array_name, devices, now, now, args.timeout))
 
     for array in array_list:
-        print(f"Added array {array.name!r} with devices {', '.join(array.devices)}")
+        print(f"Array {array.name!r}: Added with devices {', '.join(array.devices)}")
 
     while True:
         stats = get_diskstats()
