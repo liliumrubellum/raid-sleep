@@ -8,6 +8,7 @@ import subprocess
 from dataclasses import dataclass
 from collections import defaultdict
 from subprocess import Popen, PIPE
+from psutil import disk_io_counters
 
 
 def parse_args():
@@ -63,32 +64,10 @@ def open_files(mount):
 
 
 def get_diskstats():
-    # see https://www.kernel.org/doc/Documentation/iostats.txt
-    columns = [
-        "major_dev_num",
-        "minor_dev_num",
-        "device",
-        "reads",
-        "reads_merged",
-        "sectors_read",
-        "ms_reading",
-        "writes",
-        "writes_merged",
-        "sectors_written",
-        "ms_writing",
-        "current_ios",
-        "ms_doing_io",
-        "weighted_ms_doing_io",
-    ]
     result = {}
-    for line in open("/proc/diskstats"):
-        parts = line.split()
-        if len(parts) < len(columns):
-            continue
-        data = dict(zip(columns, parts))
-        result[f"/dev/{data['device']}"] = {
-            k: int(v) for k, v in data.items() if k != "device"
-        }
+    ios = disk_io_counters(perdisk=True)
+    for k, v in ios.items():
+        result[f"/dev/{k}"] = str(v.read_bytes) + " " + str(v.write_bytes)
     return result
 
 
